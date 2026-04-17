@@ -8,11 +8,7 @@ import {
   LegalchainStatGrid,
   LegalchainValueList,
 } from "~/components/legalchain/ui";
-import {
-  confirmLegalchainSandboxPayment,
-  hasLegalchainStripeConfigured,
-  syncLegalchainCheckoutStatus,
-} from "~/lib/legalchain/payments";
+import { hasLegalchainStripeConfigured } from "~/lib/legalchain/payments";
 import {
   getCurrentLegalchainUser,
   getLatestLegalchainPaymentByUserId,
@@ -21,6 +17,7 @@ import {
 } from "~/lib/legalchain/store";
 
 export const useProcessStripeLoader = routeLoader$(async (event) => {
+  const { syncLegalchainCheckoutStatus } = await import("~/lib/legalchain/payments.server");
   const user = await getCurrentLegalchainUser(event);
   if (!user) {
     throw event.redirect(302, "/auth?mode=login");
@@ -51,6 +48,7 @@ export const useProcessStripeLoader = routeLoader$(async (event) => {
 });
 
 export const useSandboxPaymentAction = routeAction$(async (form, event) => {
+  const { confirmLegalchainSandboxPayment } = await import("~/lib/legalchain/payments.server");
   const user = await getCurrentLegalchainUser(event);
   if (!user) {
     throw event.redirect(302, "/auth?mode=login");

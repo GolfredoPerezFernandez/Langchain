@@ -9,7 +9,6 @@ import {
   LegalchainValueList,
 } from "~/components/legalchain/ui";
 import {
-  createLegalchainCheckout,
   hasLegalchainStripeConfigured,
   legalchainTokenPlans,
 } from "~/lib/legalchain/payments";
@@ -28,6 +27,7 @@ export const useBuyTokenLoader = routeLoader$(async (event) => {
 });
 
 export const useCreateCheckoutAction = routeAction$(async (form, event) => {
+  const { createLegalchainCheckout } = await import("~/lib/legalchain/payments.server");
   const user = await getCurrentLegalchainUser(event);
   if (!user) {
     throw event.redirect(302, "/auth?mode=login");

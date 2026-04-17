@@ -8,7 +8,6 @@ import {
   LegalchainTable,
   LegalchainValueList,
 } from "~/components/legalchain/ui";
-import { settleLegalchainApprovedPayment } from "~/lib/legalchain/payments";
 import {
   getCurrentLegalchainUser,
   listLegalchainPayments,
@@ -45,6 +44,7 @@ export const usePaymentsLoader = routeLoader$(async (event) => {
 });
 
 export const useRetrySettlementAction = routeAction$(async (form, event) => {
+  const { settleLegalchainApprovedPayment } = await import("~/lib/legalchain/payments.server");
   const user = await getCurrentLegalchainUser(event);
   if (!user) {
     throw event.redirect(302, "/auth?mode=login");

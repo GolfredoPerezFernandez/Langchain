@@ -1,6 +1,6 @@
 import type { RequestHandler } from "@builder.io/qwik-city";
 import Stripe from "stripe";
-import { settleLegalchainApprovedPayment } from "../../../../../lib/legalchain/payments";
+import { settleLegalchainApprovedPayment } from "../../../../../lib/legalchain/payments.server";
 import { getServerEnv } from "../../../../../lib/server-env";
 import { getLegalchainPaymentByReference, upsertLegalchainPayment } from "../../../../../lib/legalchain/store";
 
