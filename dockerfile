@@ -41,7 +41,7 @@ FROM base as final
  
 # Use production node environment by default.
 ENV NODE_ENV production
-ENV ORIGIN https://acupatas.com
+ENV ORIGIN https://legalchain.local
 ENV UPLOAD_DIR /data/uploads
 
 # Prepare volume mount and permissions for uploads.

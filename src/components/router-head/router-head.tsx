@@ -1,7 +1,6 @@
 /** @jsxImportSource @builder.io/qwik */
 import { useDocumentHead, useLocation } from "@builder.io/qwik-city";
 import { component$ } from "@builder.io/qwik";
-import * as pwaHead from "@qwikdev/pwa/head";
 
 /**
  * The RouterHead component is placed inside of the document `<head>` element.
@@ -19,14 +18,9 @@ export const RouterHead = component$(() => {
       <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
       <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
       <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <meta name="theme-color" content="#4a2e85" />
       {head.meta.map((m) => (
         <meta key={m.key} {...m} />
-      ))}
-      {pwaHead.meta.map((m) => (
-        <meta key={m.key} {...m} />
-      ))}
-      {pwaHead.links.map((l) => (
-        <link key={l.key} {...l} />
       ))}
       {head.links.map((l) => (
         <link key={l.key} {...l} />

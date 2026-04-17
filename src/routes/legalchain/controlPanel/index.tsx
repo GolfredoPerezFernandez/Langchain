@@ -134,16 +134,31 @@ export const useControlPanelLoader = routeLoader$(async (event) => {
     throw event.redirect(302, "/auth?mode=login");
   }
 
-  const workspace = await getLegalchainWorkspace(user.id);
+  const workspace = await getLegalchainWorkspace(user.id, {
+    templateFilters: {
+      userId: user.id,
+      ownership: "owned-or-unassigned",
+    },
+  });
   const queue = buildControlPanelQueue(workspace);
   const editSlug = event.url.searchParams.get("edit") ?? "";
-  const editTemplate = editSlug ? await getLegalchainTemplateBySlug(editSlug) : workspace.templates[0] ?? null;
+  const editTemplate = editSlug
+    ? await getLegalchainTemplateBySlug(editSlug, {
+        userId: user.id,
+        ownership: "owned-or-unassigned",
+      })
+    : workspace.templates[0] ?? null;
 
   return { user, workspace, queue, editTemplate };
 });
 
-export const useTemplateAdminAction = routeAction$(async (form) => {
+export const useTemplateAdminAction = routeAction$(async (form, event) => {
   try {
+    const user = await getCurrentLegalchainUser(event);
+    if (!user) {
+      throw event.redirect(302, "/auth?mode=login");
+    }
+
     const intent = String(form.intent ?? "").trim();
     const title = String(form.title ?? "").trim();
     const category = String(form.category ?? "").trim();
@@ -158,6 +173,7 @@ export const useTemplateAdminAction = routeAction$(async (form) => {
 
     if (intent === "create") {
       const template = await createLegalchainTemplate({
+        userId: user.id,
         slug,
         title,
         category,
@@ -177,17 +193,24 @@ export const useTemplateAdminAction = routeAction$(async (form) => {
     }
 
     if (intent === "update") {
-      const template = await updateLegalchainTemplate(slug, {
-        title,
-        category,
-        duration,
-        status,
-        version,
-        summary,
-        audience,
-        scriptBlocks,
-        checkpoints,
-      });
+      const template = await updateLegalchainTemplate(
+        slug,
+        {
+          title,
+          category,
+          duration,
+          status,
+          version,
+          summary,
+          audience,
+          scriptBlocks,
+          checkpoints,
+        },
+        {
+          userId: user.id,
+          ownership: "owned-or-unassigned",
+        },
+      );
 
       return {
         ok: true,
@@ -196,7 +219,10 @@ export const useTemplateAdminAction = routeAction$(async (form) => {
     }
 
     if (intent === "delete") {
-      await deleteLegalchainTemplate(slug);
+      await deleteLegalchainTemplate(slug, {
+        userId: user.id,
+        ownership: "owned-or-unassigned",
+      });
       return {
         ok: true,
         message: `Template ${slug} deleted.`,

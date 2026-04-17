@@ -7,7 +7,7 @@ export const head: DocumentHead = {
   meta: [
     {
       name: "description",
-      content: "Frontend Legalchain ported into the langchain-qwik Qwik City stack.",
+      content: "Frontend Legalchain ported into the Legalchain Qwik City stack.",
     },
   ],
 };

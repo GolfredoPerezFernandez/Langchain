@@ -14,7 +14,9 @@ import { getPublicEnv, getServerEnv, isProductionEnv } from "../server-env";
 import { templateLibrary } from "./mock";
 
 const LEGALCHAIN_SESSION_COOKIE = "legalchain_session";
-const LEGALCHAIN_SCHEMA_KEY = "legalchain";
+const LEGALCHAIN_SCHEMA_KEY = "legalchain-v2";
+const LEGALCHAIN_SHARED_SESSION_KEY = "legalchain:session";
+const LEGALCHAIN_SHARED_USER_KEY = "legalchain:user";
 
 export interface LegalchainSession {
   userId: string;
@@ -277,6 +279,48 @@ const slugifyLegalchainTemplate = (value: string) =>
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
 
+type LegalchainTemplateOwnership = "all" | "owned" | "owned-or-unassigned";
+
+type LegalchainTemplateFilters = {
+  query?: string;
+  status?: string;
+  category?: string;
+  userId?: string;
+  ownership?: LegalchainTemplateOwnership;
+};
+
+type LegalchainTemplateScope = {
+  userId?: string;
+  ownership?: LegalchainTemplateOwnership;
+};
+
+type LegalchainWorkspaceOptions = {
+  templateFilters?: LegalchainTemplateFilters;
+};
+
+const appendTemplateOwnershipClause = (
+  clauses: string[],
+  args: (string | number)[],
+  scope?: LegalchainTemplateScope,
+  ownerColumnAvailable = true,
+) => {
+  const userId = sanitizeText(scope?.userId);
+  const ownership = scope?.ownership ?? "all";
+
+  if (!ownerColumnAvailable || !userId || ownership === "all") {
+    return;
+  }
+
+  if (ownership === "owned") {
+    clauses.push("user_id = ?");
+    args.push(userId);
+    return;
+  }
+
+  clauses.push("(user_id = ? or user_id is null or user_id = '')");
+  args.push(userId);
+};
+
 const toTemplateRecord = (row: Record<string, unknown>): LegalchainTemplateRecord => ({
   slug: String(row.slug ?? ""),
   title: String(row.title ?? ""),
@@ -389,6 +433,13 @@ const ensureTableColumns = async (
     }
   }
 };
+
+const hasTableColumn = async (tableName: string, columnName: string) => {
+  const result = await getTursoClient().execute(`pragma table_info(${tableName})`);
+  return result.rows.some((row: unknown) => String((row as Record<string, unknown>).name ?? "") === columnName);
+};
+
+const hasLegalchainTemplateOwnerColumn = async () => hasTableColumn("legalchain_templates", "user_id");
 
 const cleanupLegacySeededTemplates = async () => {
   const client = getTursoClient();
@@ -524,6 +575,7 @@ export const ensureLegalchainSchema = async () => {
     );`,
     `create table if not exists legalchain_templates (
       slug text primary key,
+      user_id text,
       title text not null,
       category text not null,
       duration text not null,
@@ -597,6 +649,9 @@ export const ensureLegalchainSchema = async () => {
     { name: "capture_started_at", definition: "capture_started_at text" },
     { name: "capture_ended_at", definition: "capture_ended_at text" },
   ]);
+  await ensureTableColumns("legalchain_templates", [
+    { name: "user_id", definition: "user_id text" },
+  ]);
   await ensureTableColumns("legalchain_payments", [
     { name: "provider_reference", definition: "provider_reference text" },
     { name: "details_json", definition: "details_json text not null default '{}'" },
@@ -653,34 +708,55 @@ export const clearLegalchainSession = async (event: RequestEventBase) => {
 };
 
 export const getLegalchainSessionFromEvent = async (event: RequestEventBase) => {
-  await ensureLegalchainSchema();
-  const token = event.cookie.get(LEGALCHAIN_SESSION_COOKIE)?.value;
-  if (!token) return null;
-
-  const client = getTursoClient();
-  const result = await client.execute({
-    sql: "select user_id, expires_at from legalchain_sessions where token = ? limit 1",
-    args: [token],
-  });
-  const row = result.rows[0] as Record<string, unknown> | undefined;
-  if (!row) return null;
-
-  const expiresAt = new Date(String(row.expires_at ?? ""));
-  if (expiresAt <= new Date()) {
-    await client.execute({
-      sql: "delete from legalchain_sessions where token = ?",
-      args: [token],
-    });
-    event.cookie.delete(LEGALCHAIN_SESSION_COOKIE, { path: "/" });
-    return null;
+  const cached = event.sharedMap.get(LEGALCHAIN_SHARED_SESSION_KEY);
+  if (cached !== undefined) {
+    return (await Promise.resolve(cached)) as LegalchainSession | null;
   }
 
-  await client.execute({
-    sql: "update legalchain_sessions set last_seen = ? where token = ?",
-    args: [nowIso(), token],
-  });
+  const lookupPromise = (async () => {
+    await ensureLegalchainSchema();
+    const token = event.cookie.get(LEGALCHAIN_SESSION_COOKIE)?.value;
+    if (!token) return null;
 
-  return { userId: String(row.user_id ?? ""), token } as LegalchainSession;
+    const client = getTursoClient();
+    const result = await client.execute({
+      sql: "select user_id, expires_at, last_seen from legalchain_sessions where token = ? limit 1",
+      args: [token],
+    });
+    const row = result.rows[0] as Record<string, unknown> | undefined;
+    if (!row) return null;
+
+    const expiresAt = new Date(String(row.expires_at ?? ""));
+    if (expiresAt <= new Date()) {
+      await client.execute({
+        sql: "delete from legalchain_sessions where token = ?",
+        args: [token],
+      });
+      event.cookie.delete(LEGALCHAIN_SESSION_COOKIE, { path: "/" });
+      return null;
+    }
+
+    const lastSeenValue = String(row.last_seen ?? "");
+    const lastSeen = lastSeenValue ? new Date(lastSeenValue) : null;
+    const shouldRefreshLastSeen =
+      !lastSeen ||
+      Number.isNaN(lastSeen.getTime()) ||
+      Date.now() - lastSeen.getTime() >= 5 * 60 * 1000;
+
+    if (shouldRefreshLastSeen) {
+      await client.execute({
+        sql: "update legalchain_sessions set last_seen = ? where token = ?",
+        args: [nowIso(), token],
+      });
+    }
+
+    return { userId: String(row.user_id ?? ""), token } as LegalchainSession;
+  })();
+
+  event.sharedMap.set(LEGALCHAIN_SHARED_SESSION_KEY, lookupPromise);
+  const session = await lookupPromise;
+  event.sharedMap.set(LEGALCHAIN_SHARED_SESSION_KEY, session);
+  return session;
 };
 
 export const getLegalchainUserById = async (userId: string) => {
@@ -1022,9 +1098,21 @@ export const loginLegalchainUser = async (input: LoginLegalchainInput, event: Re
 };
 
 export const getCurrentLegalchainUser = async (event: RequestEventBase) => {
-  const session = await getLegalchainSessionFromEvent(event);
-  if (!session) return null;
-  return await getLegalchainUserById(session.userId);
+  const cached = event.sharedMap.get(LEGALCHAIN_SHARED_USER_KEY);
+  if (cached !== undefined) {
+    return (await Promise.resolve(cached)) as LegalchainUser | null;
+  }
+
+  const lookupPromise = (async () => {
+    const session = await getLegalchainSessionFromEvent(event);
+    if (!session) return null;
+    return await getLegalchainUserById(session.userId);
+  })();
+
+  event.sharedMap.set(LEGALCHAIN_SHARED_USER_KEY, lookupPromise);
+  const user = await lookupPromise;
+  event.sharedMap.set(LEGALCHAIN_SHARED_USER_KEY, user);
+  return user;
 };
 
 export const verifyLegalchainPinForUser = async (userId: string, pin?: string | null) => {
@@ -1056,13 +1144,10 @@ export const verifyLegalchainPinForUser = async (userId: string, pin?: string | 
   return true;
 };
 
-export const listLegalchainTemplates = async (filters?: {
-  query?: string;
-  status?: string;
-  category?: string;
-}) => {
+export const listLegalchainTemplates = async (filters?: LegalchainTemplateFilters) => {
   await ensureLegalchainSchema();
   await cleanupLegacySeededTemplates();
+  const ownerColumnAvailable = await hasLegalchainTemplateOwnerColumn();
   const query = sanitizeText(filters?.query).toLowerCase();
   const status = sanitizeText(filters?.status);
   const category = sanitizeText(filters?.category).toLowerCase();
@@ -1090,8 +1175,10 @@ export const listLegalchainTemplates = async (filters?: {
     args.push(`%${category}%`);
   }
 
+  appendTemplateOwnershipClause(clauses, args, filters, ownerColumnAvailable);
+
   const result = await getTursoClient().execute({
-    sql: `select slug, title, category, duration, status, version, uses_count, summary, audience, script_blocks_json, checkpoints_json
+    sql: `select slug, ${ownerColumnAvailable ? "user_id, " : ""}title, category, duration, status, version, uses_count, summary, audience, script_blocks_json, checkpoints_json
       from legalchain_templates
       where ${clauses.join(" and ")}
       order by title asc`,
@@ -1101,19 +1188,49 @@ export const listLegalchainTemplates = async (filters?: {
   return result.rows.map((row: unknown) => toTemplateRecord(row as Record<string, unknown>));
 };
 
-export const getLegalchainTemplateBySlug = async (slug: string) => {
+export const listLegalchainTemplateCategories = async (scope?: LegalchainTemplateScope) => {
   await ensureLegalchainSchema();
   await cleanupLegacySeededTemplates();
+  const ownerColumnAvailable = await hasLegalchainTemplateOwnerColumn();
+  const clauses = ["trim(category) <> ''"];
+  const args: (string | number)[] = [];
+
+  appendTemplateOwnershipClause(clauses, args, scope, ownerColumnAvailable);
+
   const result = await getTursoClient().execute({
-    sql: `select slug, title, category, duration, status, version, uses_count, summary, audience, script_blocks_json, checkpoints_json
-      from legalchain_templates where slug = ? limit 1`,
-    args: [slug],
+    sql: `select distinct category
+      from legalchain_templates
+      where ${clauses.join(" and ")}
+      order by category asc`,
+    args,
+  });
+
+  return result.rows
+    .map((row: unknown) => String((row as Record<string, unknown>).category ?? "").trim())
+    .filter(Boolean);
+};
+
+export const getLegalchainTemplateBySlug = async (slug: string, scope?: LegalchainTemplateScope) => {
+  await ensureLegalchainSchema();
+  await cleanupLegacySeededTemplates();
+  const ownerColumnAvailable = await hasLegalchainTemplateOwnerColumn();
+  const normalizedSlug = sanitizeText(slug);
+  if (!normalizedSlug) return null;
+
+  const clauses = ["slug = ?"];
+  const args: (string | number)[] = [normalizedSlug];
+  appendTemplateOwnershipClause(clauses, args, scope, ownerColumnAvailable);
+  const result = await getTursoClient().execute({
+    sql: `select slug, ${ownerColumnAvailable ? "user_id, " : ""}title, category, duration, status, version, uses_count, summary, audience, script_blocks_json, checkpoints_json
+      from legalchain_templates where ${clauses.join(" and ")} limit 1`,
+    args,
   });
   const row = result.rows[0] as Record<string, unknown> | undefined;
   return row ? toTemplateRecord(row) : null;
 };
 
 export const createLegalchainTemplate = async (input: {
+  userId?: string;
   slug?: string;
   title: string;
   category: string;
@@ -1126,6 +1243,7 @@ export const createLegalchainTemplate = async (input: {
   checkpoints?: string[];
 }) => {
   await ensureLegalchainSchema();
+  const ownerColumnAvailable = await hasLegalchainTemplateOwnerColumn();
 
   const title = sanitizeText(input.title);
   const category = sanitizeText(input.category);
@@ -1144,26 +1262,51 @@ export const createLegalchainTemplate = async (input: {
   }
 
   const timestamp = nowIso();
-  await getTursoClient().execute({
-    sql: `insert into legalchain_templates(
-      slug, title, category, duration, status, version, uses_count, summary, audience, script_blocks_json, checkpoints_json, created_at, updated_at
-    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    args: [
-      slug,
-      title,
-      category,
-      sanitizeText(input.duration) || "45-60 sec",
-      sanitizeText(input.status) || "Draft",
-      sanitizeText(input.version) || "v1.0",
-      0,
-      sanitizeText(input.summary),
-      sanitizeText(input.audience),
-      JSON.stringify(input.scriptBlocks ?? []),
-      JSON.stringify(input.checkpoints ?? []),
-      timestamp,
-      timestamp,
-    ],
-  });
+  const userId = sanitizeText(input.userId);
+  await getTursoClient().execute(
+    ownerColumnAvailable
+      ? {
+          sql: `insert into legalchain_templates(
+            slug, user_id, title, category, duration, status, version, uses_count, summary, audience, script_blocks_json, checkpoints_json, created_at, updated_at
+          ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          args: [
+            slug,
+            userId || null,
+            title,
+            category,
+            sanitizeText(input.duration) || "45-60 sec",
+            sanitizeText(input.status) || "Draft",
+            sanitizeText(input.version) || "v1.0",
+            0,
+            sanitizeText(input.summary),
+            sanitizeText(input.audience),
+            JSON.stringify(input.scriptBlocks ?? []),
+            JSON.stringify(input.checkpoints ?? []),
+            timestamp,
+            timestamp,
+          ],
+        }
+      : {
+          sql: `insert into legalchain_templates(
+            slug, title, category, duration, status, version, uses_count, summary, audience, script_blocks_json, checkpoints_json, created_at, updated_at
+          ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          args: [
+            slug,
+            title,
+            category,
+            sanitizeText(input.duration) || "45-60 sec",
+            sanitizeText(input.status) || "Draft",
+            sanitizeText(input.version) || "v1.0",
+            0,
+            sanitizeText(input.summary),
+            sanitizeText(input.audience),
+            JSON.stringify(input.scriptBlocks ?? []),
+            JSON.stringify(input.checkpoints ?? []),
+            timestamp,
+            timestamp,
+          ],
+        },
+  );
 
   return await getLegalchainTemplateBySlug(slug);
 };
@@ -1178,46 +1321,78 @@ export const updateLegalchainTemplate = async (slug: string, input: {
   audience?: string;
   scriptBlocks?: { title: string; copy: string }[];
   checkpoints?: string[];
-}) => {
+}, scope?: LegalchainTemplateScope) => {
   await ensureLegalchainSchema();
+  const ownerColumnAvailable = await hasLegalchainTemplateOwnerColumn();
   const normalizedSlug = sanitizeText(slug);
   if (!normalizedSlug) {
     throw new Error("Template slug is required.");
   }
 
-  const existing = await getLegalchainTemplateBySlug(normalizedSlug);
+  const existing = await getLegalchainTemplateBySlug(normalizedSlug, scope);
   if (!existing) {
     throw new Error("Template not found.");
   }
 
-  await getTursoClient().execute({
-    sql: `update legalchain_templates
-      set title = ?, category = ?, duration = ?, status = ?, version = ?, summary = ?, audience = ?,
-      script_blocks_json = ?, checkpoints_json = ?, updated_at = ?
-      where slug = ?`,
-    args: [
-      sanitizeText(input.title) || existing.title,
-      sanitizeText(input.category) || existing.category,
-      sanitizeText(input.duration) || existing.duration,
-      sanitizeText(input.status) || existing.status,
-      sanitizeText(input.version) || existing.version,
-      sanitizeText(input.summary) || existing.summary,
-      sanitizeText(input.audience) || existing.audience,
-      JSON.stringify(input.scriptBlocks ?? existing.scriptBlocks),
-      JSON.stringify(input.checkpoints ?? existing.checkpoints),
-      nowIso(),
-      normalizedSlug,
-    ],
-  });
+  const ownerId = sanitizeText(scope?.userId);
+  await getTursoClient().execute(
+    ownerColumnAvailable
+      ? {
+          sql: `update legalchain_templates
+            set user_id = case when coalesce(user_id, '') = '' and ? <> '' then ? else user_id end,
+            title = ?, category = ?, duration = ?, status = ?, version = ?, summary = ?, audience = ?,
+            script_blocks_json = ?, checkpoints_json = ?, updated_at = ?
+            where slug = ?`,
+          args: [
+            ownerId,
+            ownerId,
+            sanitizeText(input.title) || existing.title,
+            sanitizeText(input.category) || existing.category,
+            sanitizeText(input.duration) || existing.duration,
+            sanitizeText(input.status) || existing.status,
+            sanitizeText(input.version) || existing.version,
+            sanitizeText(input.summary) || existing.summary,
+            sanitizeText(input.audience) || existing.audience,
+            JSON.stringify(input.scriptBlocks ?? existing.scriptBlocks),
+            JSON.stringify(input.checkpoints ?? existing.checkpoints),
+            nowIso(),
+            normalizedSlug,
+          ],
+        }
+      : {
+          sql: `update legalchain_templates
+            set title = ?, category = ?, duration = ?, status = ?, version = ?, summary = ?, audience = ?,
+            script_blocks_json = ?, checkpoints_json = ?, updated_at = ?
+            where slug = ?`,
+          args: [
+            sanitizeText(input.title) || existing.title,
+            sanitizeText(input.category) || existing.category,
+            sanitizeText(input.duration) || existing.duration,
+            sanitizeText(input.status) || existing.status,
+            sanitizeText(input.version) || existing.version,
+            sanitizeText(input.summary) || existing.summary,
+            sanitizeText(input.audience) || existing.audience,
+            JSON.stringify(input.scriptBlocks ?? existing.scriptBlocks),
+            JSON.stringify(input.checkpoints ?? existing.checkpoints),
+            nowIso(),
+            normalizedSlug,
+          ],
+        },
+  );
 
-  return await getLegalchainTemplateBySlug(normalizedSlug);
+  return await getLegalchainTemplateBySlug(normalizedSlug, scope);
 };
 
-export const deleteLegalchainTemplate = async (slug: string) => {
+export const deleteLegalchainTemplate = async (slug: string, scope?: LegalchainTemplateScope) => {
   await ensureLegalchainSchema();
   const normalizedSlug = sanitizeText(slug);
   if (!normalizedSlug) {
     throw new Error("Template slug is required.");
+  }
+
+  const existing = await getLegalchainTemplateBySlug(normalizedSlug, scope);
+  if (!existing) {
+    throw new Error("Template not found.");
   }
 
   await getTursoClient().execute({
@@ -1254,6 +1429,22 @@ export const getLegalchainRecordByHash = async (hash: string, userId?: string | 
       where hash = ? and (? = '' or user_id = ?)
       limit 1`,
     args: [normalizedHash, scopedByUser, scopedByUser],
+  });
+
+  const row = result.rows[0] as Record<string, unknown> | undefined;
+  return row ? toRecordRow(row) : null;
+};
+
+export const getLatestLegalchainRecordByUserId = async (userId: string) => {
+  await ensureLegalchainSchema();
+  const result = await getTursoClient().execute({
+    sql: `select hash, user_id, title, template_slug, template_title, status, updated, duration, visibility, owner,
+      token_id, contract_address, collection_name, ipfs_uri, media_url, metadata_json, network, created_at
+      from legalchain_records
+      where user_id = ?
+      order by created_at desc
+      limit 1`,
+    args: [userId],
   });
 
   const row = result.rows[0] as Record<string, unknown> | undefined;
@@ -1386,6 +1577,33 @@ export const getLegalchainPaymentByReference = async (reference: string, userId?
   } as LegalchainPaymentRow;
 };
 
+export const getLatestLegalchainPaymentByUserId = async (userId: string) => {
+  await ensureLegalchainSchema();
+  const result = await getTursoClient().execute({
+    sql: `select reference, user_id, flow, status, amount, method, requested_at, provider_reference, details_json
+      from legalchain_payments
+      where user_id = ?
+      order by requested_at desc
+      limit 1`,
+    args: [userId],
+  });
+
+  const payment = result.rows[0] as Record<string, unknown> | undefined;
+  if (!payment) return null;
+
+  return {
+    reference: String(payment.reference ?? ""),
+    userId: String(payment.user_id ?? ""),
+    flow: String(payment.flow ?? ""),
+    status: String(payment.status ?? ""),
+    amount: String(payment.amount ?? ""),
+    method: String(payment.method ?? ""),
+    requestedAt: String(payment.requested_at ?? ""),
+    providerReference: String(payment.provider_reference ?? ""),
+    detailsJson: parseJsonObject(payment.details_json),
+  } as LegalchainPaymentRow;
+};
+
 export const upsertLegalchainPayment = async (input: {
   reference: string;
   userId: string;
@@ -1440,13 +1658,13 @@ export const upsertLegalchainPayment = async (input: {
   return await getLegalchainPaymentByReference(input.reference, input.userId);
 };
 
-export const getLegalchainWorkspace = async (userId: string) => {
+export const getLegalchainWorkspace = async (userId: string, options?: LegalchainWorkspaceOptions) => {
   const [user, wallet, draft, collection, templates, records, payments] = await Promise.all([
     getLegalchainUserById(userId),
     getLegalchainWalletByUserId(userId),
     getLegalchainDraftByUserId(userId),
     getLegalchainCollectionByUserId(userId),
-    listLegalchainTemplates(),
+    listLegalchainTemplates(options?.templateFilters),
     listLegalchainRecords(userId),
     listLegalchainPayments(userId),
   ]);
@@ -1484,6 +1702,92 @@ export const getLegalchainWorkspace = async (userId: string) => {
     templates,
     records,
     payments,
+  };
+};
+
+const getLegalchainTemplateStats = async (scope?: LegalchainTemplateScope) => {
+  await ensureLegalchainSchema();
+  await cleanupLegacySeededTemplates();
+  const ownerColumnAvailable = await hasLegalchainTemplateOwnerColumn();
+  const clauses = ["1 = 1"];
+  const args: (string | number)[] = [];
+
+  appendTemplateOwnershipClause(clauses, args, scope, ownerColumnAvailable);
+
+  const result = await getTursoClient().execute({
+    sql: `select
+        count(*) as total_count,
+        sum(case when status = 'Review' then 1 else 0 end) as review_count
+      from legalchain_templates
+      where ${clauses.join(" and ")}`,
+    args,
+  });
+
+  const row = result.rows[0] as Record<string, unknown> | undefined;
+  return {
+    total: parseRowNumber(row?.total_count),
+    review: parseRowNumber(row?.review_count),
+  };
+};
+
+const getLegalchainRecordStats = async (userId: string) => {
+  await ensureLegalchainSchema();
+  const result = await getTursoClient().execute({
+    sql: `select
+        count(*) as total_count,
+        sum(case when status = 'Review' then 1 else 0 end) as review_count
+      from legalchain_records
+      where user_id = ?`,
+    args: [userId],
+  });
+
+  const row = result.rows[0] as Record<string, unknown> | undefined;
+  return {
+    total: parseRowNumber(row?.total_count),
+    review: parseRowNumber(row?.review_count),
+  };
+};
+
+const getLegalchainPaymentStats = async (userId: string) => {
+  await ensureLegalchainSchema();
+  const result = await getTursoClient().execute({
+    sql: `select
+        count(*) as total_count,
+        sum(case when status <> 'Approved' then 1 else 0 end) as pending_count
+      from legalchain_payments
+      where user_id = ?`,
+    args: [userId],
+  });
+
+  const row = result.rows[0] as Record<string, unknown> | undefined;
+  return {
+    total: parseRowNumber(row?.total_count),
+    pending: parseRowNumber(row?.pending_count),
+  };
+};
+
+export const getLegalchainWorkspaceSummary = async (userId: string) => {
+  const [wallet, draft, collection, templateStats, recordStats, paymentStats] = await Promise.all([
+    getLegalchainWalletByUserId(userId),
+    getLegalchainDraftByUserId(userId),
+    getLegalchainCollectionByUserId(userId),
+    getLegalchainTemplateStats({
+      userId,
+      ownership: "owned-or-unassigned",
+    }),
+    getLegalchainRecordStats(userId),
+    getLegalchainPaymentStats(userId),
+  ]);
+
+  return {
+    walletAddress: wallet?.address ?? "",
+    hasCollection: Boolean(collection),
+    collectionName: collection?.name ?? "",
+    recordsCount: recordStats.total,
+    templatesCount: templateStats.total,
+    pendingPayments: paymentStats.pending,
+    reviewItems: templateStats.review + recordStats.review + paymentStats.pending,
+    draftTitle: draft?.title ?? "",
   };
 };
 

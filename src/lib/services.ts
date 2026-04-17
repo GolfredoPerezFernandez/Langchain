@@ -34,8 +34,8 @@ const notifyCaregiverCapacityChanged = async (caregiverId: string) => {
 type BdvValidationOptions = {
   bdvApiKey?: string;
   bdvEndpoint?: string;
-  acupatasRif?: string;
-  acupatasPhone?: string;
+  legalchainRif?: string;
+  legalchainPhone?: string;
 };
 
 export type ServiceRequestRecord = {
@@ -1061,7 +1061,7 @@ export const submitFeePayment = async (
     args: ['fee_submitted', now, booking.request_id],
   });
 
-  await addPaymentEvent(bookingId, caregiverId, 'caregiver', 'info', `Cuidador reportó fee a ACUPATAS ($${amount}). Se valida en máximo 24h.`);
+  await addPaymentEvent(bookingId, caregiverId, 'caregiver', 'info', `Cuidador reportó fee a Legalchain ($${amount}). Se valida en máximo 24h.`);
 
   // Notify both parties via WS so their UI updates immediately
   try {
@@ -1142,8 +1142,8 @@ export const validateFeePayment = async (bookingId: string, adminId: string, for
       return { ok: false, reason: 'bank_paymobile_missing' } as const;
     }
 
-    const bdvRifDestino = String(options?.acupatasRif || 'J507903559');
-    const bdvPhoneDestino = String(options?.acupatasPhone || '04147199496');
+    const bdvRifDestino = String(options?.legalchainRif || 'J507903559');
+    const bdvPhoneDestino = String(options?.legalchainPhone || '04147199496');
 
     const bancoOrigen = String(booking.fee_bank_origin || getBankCode(bank.bank_name)).trim();
     const isBdvToBdv = bancoOrigen === '0102';
@@ -1234,13 +1234,13 @@ export const validateFeePayment = async (bookingId: string, adminId: string, for
   // Unlock other chats for the owner
   await unlockOwnerChats(booking.owner_id as string);
 
-  await addPaymentEvent(bookingId, adminId, 'admin', 'success', 'ACUPATAS confirmó el fee y generó factura digital.');
+  await addPaymentEvent(bookingId, adminId, 'admin', 'success', 'Legalchain confirmó el fee y generó factura digital.');
 
   await createNotification(
     booking.caregiver_id as string,
     'payment',
     'Comisión validada',
-    'ACUPATAS ha validado tu pago de comisión. El servicio está activo.'
+    'Legalchain ha validado tu pago de comisión. El servicio está activo.'
   );
 
   // Also notify owner so their UI refreshes and blocks the pet in other chats

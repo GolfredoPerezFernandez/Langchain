@@ -1,7 +1,7 @@
 import { qwikVite } from "@builder.io/qwik/optimizer";
 import { imagetools } from "vite-imagetools";
 import { qwikCity } from "@builder.io/qwik-city/vite";
-import { type PWAOptions, qwikPwa } from "@qwikdev/pwa";
+import type { PWAOptions } from "@qwikdev/pwa";
 
 const unsetBlankEnv = (...keys: string[]) => {
   for (const key of keys) {
@@ -16,10 +16,14 @@ unsetBlankEnv("ORIGIN", "HOST", "PORT");
 export default (async (env?: { command?: string }) => {
   const tsconfigPaths = (await import("vite-tsconfig-paths")).default;
   const tailwindcssPlugin = (await import("@tailwindcss/vite")).default;
-  const isDevServer = env?.command === "serve";
-  const pwaConfig: PWAOptions = isDevServer
-    ? { config: false, overrideManifestIcons: false }
-    : { config: true };
+  const isBuild = env?.command === "build";
+  const pwaPlugin = isBuild
+    ? [
+        (
+          await import("@qwikdev/pwa")
+        ).qwikPwa({ config: true } satisfies PWAOptions),
+      ]
+    : [];
 
   return {
     define: {
@@ -31,7 +35,7 @@ export default (async (env?: { command?: string }) => {
       qwikVite(),
       imagetools(),
       tsconfigPaths(),
-      qwikPwa(pwaConfig),
+      ...pwaPlugin,
       tailwindcssPlugin(),
       {
         name: 'webSocketServerPlugin',

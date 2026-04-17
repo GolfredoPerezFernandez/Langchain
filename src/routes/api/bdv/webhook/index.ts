@@ -45,8 +45,8 @@ export const onPost: RequestHandler = async ({ request, json, env }) => {
             {
                 bdvApiKey: env.get('BDV_KEY') || env.get('BDV_API_KEY') || env.get('BDV_API_KEY_QA') || '',
                 bdvEndpoint: env.get('BDV_API_ENDPOINT') || env.get('BDV_ENDPOINT') || 'https://bdvconciliacion.banvenez.com/getMovement',
-                acupatasRif: env.get('ACUPATAS_RIF') || 'J507903559',
-                acupatasPhone: env.get('ACUPATAS_PHONE') || '04147199496',
+                legalchainRif: env.get('LEGALCHAIN_RIF') || 'J507903559',
+                legalchainPhone: env.get('LEGALCHAIN_PHONE') || '04147199496',
             }
         );
 

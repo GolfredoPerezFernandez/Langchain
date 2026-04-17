@@ -5,7 +5,11 @@ import { LegalchainPill } from "~/components/legalchain/ui";
 import { PushManager } from "~/components/push-manager";
 import { LegalchainLogo } from "~/components/legalchain/logo";
 import { legalchainPrivateNav, legalchainPublicNav } from "~/lib/legalchain/nav";
-import { getCurrentLegalchainUser, getLegalchainSessionFromEvent, getLegalchainWorkspace } from "~/lib/legalchain/store";
+import {
+  getCurrentLegalchainUser,
+  getLegalchainSessionFromEvent,
+  getLegalchainWorkspaceSummary,
+} from "~/lib/legalchain/store";
 
 const legalchainPrivatePrefixes = [
   "/controlPanel",
@@ -74,24 +78,12 @@ export const useRootLayoutLoader = routeLoader$(async (event) => {
     };
   }
 
-  const workspace = await getLegalchainWorkspace(user.id);
-  const pendingPayments = workspace.payments.filter((payment: { status: string }) => payment.status !== "Approved").length;
-  const reviewItems =
-    workspace.templates.filter((template: { status: string }) => template.status === "Review").length +
-    workspace.records.filter((record: { status: string }) => record.status === "Review").length +
-    pendingPayments;
+  const workspace = await getLegalchainWorkspaceSummary(user.id);
 
   return {
     privateWorkspace: {
       userName: user.fullName,
-      walletAddress: workspace.wallet?.address ?? "",
-      hasCollection: Boolean(workspace.collection),
-      collectionName: workspace.collection?.name ?? "",
-      recordsCount: workspace.records.length,
-      templatesCount: workspace.templates.length,
-      pendingPayments,
-      reviewItems,
-      draftTitle: workspace.draft?.title ?? "",
+      ...workspace,
     },
   };
 });
@@ -100,6 +92,7 @@ export default component$(() => {
   const location = useLocation();
   const layoutData = useRootLayoutLoader().value;
   const path = location.url.pathname;
+  const isNavigating = Boolean(location.isNavigating);
   const activeLanguage = location.url.searchParams.get("lang") === "es" ? "es" : "en";
   const passThrough =
     path.startsWith("/legalchain") ||
@@ -206,9 +199,16 @@ export default component$(() => {
 
   return (
     <div class="root-legalchain">
+      <div
+        aria-hidden="true"
+        class={[
+          "pointer-events-none fixed left-0 top-0 z-50 h-1 w-full origin-left bg-[linear-gradient(90deg,#ffffff,#f4b2ff)] shadow-[0_0_22px_rgba(255,255,255,0.4)] transition-all duration-200",
+          isNavigating ? "scale-x-100 opacity-100" : "scale-x-0 opacity-0",
+        ]}
+      />
       <div class="relative z-10 min-h-screen">
         <header class="border-b border-white/10 bg-black/10 backdrop-blur">
-          <div class="mx-auto flex max-w-7xl items-center justify-between gap-6 px-4 py-4 sm:px-6">
+          <div class="mx-auto flex max-w-[1520px] items-center justify-between gap-6 px-4 py-4 sm:px-6">
             <Link href="/" class="shrink-0">
               <LegalchainLogo />
             </Link>
@@ -311,8 +311,8 @@ export default component$(() => {
         <div
           class={
             isPrivateApp
-              ? "mx-auto grid max-w-7xl gap-8 px-4 py-10 sm:px-6 lg:grid-cols-[300px_minmax(0,1fr)]"
-              : "mx-auto max-w-7xl px-4 py-10 sm:px-6"
+              ? "mx-auto grid max-w-[1520px] gap-8 px-4 py-10 sm:px-6 xl:grid-cols-[272px_minmax(0,1fr)]"
+              : "mx-auto max-w-[1520px] px-4 py-10 sm:px-6"
           }
         >
           {isPrivateApp && (

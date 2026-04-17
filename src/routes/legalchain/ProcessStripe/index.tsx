@@ -15,7 +15,8 @@ import {
 } from "~/lib/legalchain/payments";
 import {
   getCurrentLegalchainUser,
-  listLegalchainPayments,
+  getLatestLegalchainPaymentByUserId,
+  getLegalchainPaymentByReference,
   type LegalchainPaymentRow,
 } from "~/lib/legalchain/store";
 
@@ -28,10 +29,9 @@ export const useProcessStripeLoader = routeLoader$(async (event) => {
   const reference = event.url.searchParams.get("ref")?.trim() || "";
   const sessionId = event.url.searchParams.get("session_id")?.trim() || "";
   const checkoutState = event.url.searchParams.get("checkout")?.trim() || "";
-  const payments: LegalchainPaymentRow[] = await listLegalchainPayments(user.id);
-  let payment = reference
-    ? payments.find((item: LegalchainPaymentRow) => item.reference === reference) ?? null
-    : payments[0] ?? null;
+  let payment: LegalchainPaymentRow | null = reference
+    ? await getLegalchainPaymentByReference(reference, user.id)
+    : await getLatestLegalchainPaymentByUserId(user.id);
 
   if (payment && (sessionId || checkoutState === "success")) {
     payment =

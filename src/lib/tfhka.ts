@@ -204,7 +204,7 @@ export function buildCommissionInvoicePayload(params: {
                 {
                     NumeroLinea: '1',
                     IndicadorBienoServicio: '2', // Servicio
-                    Descripcion: `Comisión de Servicio Acupatas - Reserva #${bookingId}`,
+                    Descripcion: `Comisión de Servicio Legalchain - Reserva #${bookingId}`,
                     Cantidad: '1.00',
                     UnidadMedida: UNIT,
                     PrecioUnitario: commissionVes.toFixed(2),

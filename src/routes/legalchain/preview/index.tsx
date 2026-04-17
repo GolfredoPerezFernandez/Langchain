@@ -11,7 +11,7 @@ import {
   clearLegalchainDraft,
   getCurrentLegalchainUser,
   getLegalchainDraftByUserId,
-  listLegalchainRecords,
+  getLatestLegalchainRecordByUserId,
 } from "~/lib/legalchain/store";
 import { mintLegalchainNft } from "~/lib/legalchain/nft";
 
@@ -21,15 +21,15 @@ export const usePreviewLoader = routeLoader$(async (event) => {
     throw event.redirect(302, "/auth?mode=login");
   }
 
-  const [draft, records] = await Promise.all([
+  const [draft, record] = await Promise.all([
     getLegalchainDraftByUserId(user.id),
-    listLegalchainRecords(user.id),
+    getLatestLegalchainRecordByUserId(user.id),
   ]);
 
   return {
     user,
     draft,
-    record: records[0] ?? null,
+    record,
   };
 });
 
@@ -48,6 +48,13 @@ export const usePreviewMintAction = routeAction$(async (form, event) => {
   }
 
   const draft = await getLegalchainDraftByUserId(user.id);
+  if (!draft) {
+    return {
+      ok: false,
+      error: "Save a draft in Record before minting on Base.",
+    };
+  }
+
   const metadata = draft
     ? {
         image: draft.assetUri,
@@ -258,61 +265,74 @@ export default component$(() => {
             title="Mint proof NFT"
             description="This action uses the user's custodial wallet on Base. If the user has no collection yet, the backend deploys it first and then mints into it."
           >
-            <Form action={mintAction} class="space-y-4">
-              <input type="hidden" name="templateSlug" value={currentPreview.templateSlug} />
-              <input type="hidden" name="templateTitle" value={currentPreview.templateTitle} />
-              <input type="hidden" name="duration" value={currentPreview.duration} />
-              <input type="hidden" name="visibility" value={currentPreview.visibility} />
+            {hasDraft ? (
+              <Form action={mintAction} class="space-y-4">
+                <input type="hidden" name="templateSlug" value={currentPreview.templateSlug} />
+                <input type="hidden" name="templateTitle" value={currentPreview.templateTitle} />
+                <input type="hidden" name="duration" value={currentPreview.duration} />
+                <input type="hidden" name="visibility" value={currentPreview.visibility} />
 
-              <label class="block">
-                <div class="mb-2 text-[10px] uppercase tracking-[0.22em] text-white/40">NFT title</div>
-                <input
-                  name="title"
-                  value={currentPreview.title}
-                  class="w-full rounded-[18px] border border-white/10 bg-[#0d0713]/88 px-4 py-3 text-sm text-white outline-none"
-                />
-              </label>
+                <label class="block">
+                  <div class="mb-2 text-[10px] uppercase tracking-[0.22em] text-white/40">NFT title</div>
+                  <input
+                    name="title"
+                    value={currentPreview.title}
+                    class="w-full rounded-[18px] border border-white/10 bg-[#0d0713]/88 px-4 py-3 text-sm text-white outline-none"
+                  />
+                </label>
 
-              <label class="block">
-                <div class="mb-2 text-[10px] uppercase tracking-[0.22em] text-white/40">Description</div>
-                <textarea
-                  name="description"
-                  rows={4}
-                  class="w-full rounded-[18px] border border-white/10 bg-[#0d0713]/88 px-4 py-3 text-sm text-white outline-none"
+                <label class="block">
+                  <div class="mb-2 text-[10px] uppercase tracking-[0.22em] text-white/40">Description</div>
+                  <textarea
+                    name="description"
+                    rows={4}
+                    class="w-full rounded-[18px] border border-white/10 bg-[#0d0713]/88 px-4 py-3 text-sm text-white outline-none"
+                  >
+                    {currentPreview.description || `Preview export for ${currentPreview.templateTitle}.`}
+                  </textarea>
+                </label>
+
+                <label class="block">
+                  <div class="mb-2 text-[10px] uppercase tracking-[0.22em] text-white/40">Operator PIN</div>
+                  <input
+                    name="pin"
+                    type="password"
+                    placeholder="PIN used for protected actions"
+                    class="w-full rounded-[18px] border border-white/10 bg-[#0d0713]/88 px-4 py-3 text-sm text-white outline-none"
+                  />
+                </label>
+
+                {mintAction.value && !mintAction.value.ok && (
+                  <div class="rounded-[18px] border border-rose-400/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-100">
+                    {mintAction.value.error}
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  class="w-full rounded-full bg-white px-4 py-3 text-sm font-black uppercase tracking-[0.22em] text-[#7e0f84]"
                 >
-                  {currentPreview.description || `Preview export for ${currentPreview.templateTitle}.`}
-                </textarea>
-              </label>
-
-              <label class="block">
-                <div class="mb-2 text-[10px] uppercase tracking-[0.22em] text-white/40">Operator PIN</div>
-                <input
-                  name="pin"
-                  type="password"
-                  placeholder="PIN used for protected actions"
-                  class="w-full rounded-[18px] border border-white/10 bg-[#0d0713]/88 px-4 py-3 text-sm text-white outline-none"
-                />
-              </label>
-
-              {!hasDraft && (
+                  {mintAction.isRunning ? "Minting..." : "Mint on Base"}
+                </button>
+              </Form>
+            ) : (
+              <div class="space-y-4">
                 <div class="rounded-[18px] border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-sm text-amber-100">
-                  Upload a new draft in the record route if you want the minted NFT to include a fresh evidence asset.
+                  Save a fresh draft in Record before minting. Preview can still show the last published asset, but mint now requires a current draft.
                 </div>
-              )}
-
-              {mintAction.value && !mintAction.value.ok && (
-                <div class="rounded-[18px] border border-rose-400/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-100">
-                  {mintAction.value.error}
-                </div>
-              )}
-
-              <button
-                type="submit"
-                class="w-full rounded-full bg-white px-4 py-3 text-sm font-black uppercase tracking-[0.22em] text-[#7e0f84]"
-              >
-                {mintAction.isRunning ? "Minting..." : "Mint on Base"}
-              </button>
-            </Form>
+                {mintAction.value && !mintAction.value.ok && (
+                  <div class="rounded-[18px] border border-rose-400/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-100">
+                    {mintAction.value.error}
+                  </div>
+                )}
+                <Link
+                  href="/record"
+                  class="inline-flex rounded-full bg-white px-4 py-3 text-sm font-black uppercase tracking-[0.22em] text-[#7e0f84]"
+                >
+                  Go to record
+                </Link>
+              </div>
+            )}
           </LegalchainPanel>
 
           <LegalchainPanel eyebrow="Review checklist" title="Before publishing">

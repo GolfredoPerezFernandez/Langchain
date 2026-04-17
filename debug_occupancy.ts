@@ -1,8 +1,9 @@
+import 'dotenv/config';
 import { createClient } from '@libsql/client';
 
 const client = createClient({
-    url: 'libsql://db-acupatas-golfredo.aws-us-east-1.turso.io',
-    authToken: 'eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3NjczNzY3NzYsImlkIjoiNmZiNGVmYjEtNDA1MC00NjEzLTkzNmUtNjUxODlkOTEwZGM1IiwicmlkIjoiNTE2YjIwMTktMjBkOC00NzUxLTk3MTgtYzJmZGJkMmFhZWNkIn0.KVxIcMVOOM6ZE3lC-zjcwhPzvLC-5acdpwZkdUFa46H64Hu0zi__U37Xpm_hZI_gWxb7Q1q4duIhiyUdYaQcCw',
+    url: process.env.PRIVATE_TURSO_DATABASE_URL || process.env.TURSO_DATABASE_URL || 'file:dev.db',
+    authToken: process.env.PRIVATE_TURSO_AUTH_TOKEN || process.env.TURSO_AUTH_TOKEN,
 });
 
 async function main() {

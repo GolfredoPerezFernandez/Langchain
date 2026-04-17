@@ -1,9 +1,9 @@
-# fly.toml app configuration file generated for langchain-old-thunder-7195 on 2026-03-22T15:16:29-04:00
+# fly.toml app configuration file generated for legalchain-app on 2026-03-28T17:10:35-04:00
 #
 # See https://fly.io/docs/reference/configuration/ for information about how to use this file.
 #
 
-app = 'langchain-old-thunder-7195'
+app = 'legalchain-app'
 primary_region = 'iad'
 
 [build]
@@ -16,7 +16,7 @@ primary_region = 'iad'
   PORT = '3000'
 
 [[mounts]]
-  source = 'acupatas_uploads'
+  source = 'legalchain_uploads'
   destination = '/data'
 
 [http_service]
@@ -37,3 +37,5 @@ primary_region = 'iad'
 [[vm]]
   size = 'shared-cpu-2x'
   memory = '2gb'
+  cpus = 2
+  memory_mb = 2048

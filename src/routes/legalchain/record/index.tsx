@@ -308,7 +308,7 @@ export default component$(() => {
   const recorderState = useStore({
     modePrivate: false,
     supportsRecorder: false,
-    cameraStatus: "Checking access",
+    cameraStatus: "Ready to start",
     teleprompterStatus: "Ready",
     recorderStatus: "idle" as RecorderStatus,
     selectedPresetSeconds: 180,
@@ -344,6 +344,8 @@ export default component$(() => {
         : recorderState.recorderStatus === "recording" || recorderState.recorderStatus === "paused"
           ? formatClock(recorderState.remainingSeconds)
           : normalizeDurationLabel(recorderState.selectedPresetSeconds);
+  const stageSecondaryButtonClass =
+    "rounded-full border border-white/12 bg-white/[0.08] px-4 py-3 text-sm font-semibold text-white transition disabled:cursor-not-allowed disabled:border-white/6 disabled:bg-white/[0.03] disabled:text-white/30 disabled:opacity-100";
 
   useVisibleTask$(({ cleanup }) => {
     let stream: MediaStream | undefined;
@@ -421,6 +423,7 @@ export default component$(() => {
       }
 
       recorderState.cameraStatus = "Requesting access";
+      recorderState.error = "";
 
       try {
         stream = await navigator.mediaDevices.getUserMedia({
@@ -440,6 +443,19 @@ export default component$(() => {
             ? error.message
             : "Camera or microphone access was blocked. You can still upload a file.";
       }
+    };
+
+    const detectRecorderSupport = () => {
+      const supported = Boolean(navigator.mediaDevices?.getUserMedia) && typeof MediaRecorder !== "undefined";
+      recorderState.supportsRecorder = supported;
+      recorderState.mimeType = supported ? resolveRecorderMimeType() : "";
+
+      if (supported) {
+        recorderState.cameraStatus = stream ? "Camera ready" : "Ready to start";
+        return;
+      }
+
+      recorderState.cameraStatus = "Upload only";
     };
 
     const startTeleprompter = (delayMs = 0) => {
@@ -676,7 +692,7 @@ export default component$(() => {
       },
     });
 
-    void ensureStream();
+    detectRecorderSupport();
 
     cleanup(() => {
       stopCountdown();
@@ -728,7 +744,7 @@ export default component$(() => {
           },
         ]}
       />
-      <div class="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
+      <div class="grid gap-6 xl:grid-cols-[minmax(320px,0.82fr)_minmax(0,1.18fr)]">
         <div class="space-y-6">
           <LegalchainPanel
             eyebrow="Template selector"
@@ -907,17 +923,18 @@ export default component$(() => {
           </LegalchainPanel>
         </div>
 
-        <div class="space-y-6">
-          <LegalchainPanel eyebrow="Stage" title="Camera and teleprompter">
-            <div class="grid gap-4 xl:grid-cols-[1.08fr_0.92fr]">
-              <div class="rounded-[28px] border border-white/10 bg-[#09050e] p-5">
+        <div class="grid gap-6 lg:grid-cols-2">
+          <div class="lg:col-span-2">
+            <LegalchainPanel eyebrow="Stage" title="Camera and teleprompter">
+              <div class="grid items-start gap-5 lg:grid-cols-[minmax(260px,0.72fr)_minmax(340px,1.28fr)]">
+                <div class="min-w-0 rounded-[28px] border border-white/10 bg-[#09050e] p-4 lg:p-5">
                 {(recorderState.recorderStatus === "countdown" ||
                   recorderState.recorderStatus === "recording" ||
                   recorderState.recorderStatus === "paused") && recorderState.supportsRecorder ? (
                   <div class="relative overflow-hidden rounded-[24px] border border-white/10 bg-black">
                     <video
                       ref={liveVideoRef}
-                      class="min-h-[380px] w-full object-cover"
+                      class="min-h-[280px] w-full object-cover lg:min-h-[320px] xl:min-h-[380px]"
                       autoplay
                       muted
                       playsInline
@@ -932,12 +949,12 @@ export default component$(() => {
                   </div>
                 ) : previewAssetType.startsWith("video/") && previewUrl ? (
                   <video
-                    class="min-h-[380px] w-full rounded-[24px] border border-white/10 object-cover"
+                    class="min-h-[280px] w-full rounded-[24px] border border-white/10 object-cover lg:min-h-[320px] xl:min-h-[380px]"
                     controls
                     src={previewUrl}
                   />
                 ) : previewAssetType.startsWith("audio/") && previewUrl ? (
-                  <div class="grid min-h-[380px] place-items-center rounded-[24px] border border-white/10 bg-[radial-gradient(circle_at_top,rgba(126,15,132,0.22),transparent_42%),linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0.01))] p-8">
+                  <div class="grid min-h-[280px] place-items-center rounded-[24px] border border-white/10 bg-[radial-gradient(circle_at_top,rgba(126,15,132,0.22),transparent_42%),linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0.01))] p-8 lg:min-h-[320px] xl:min-h-[380px]">
                     <div class="w-full max-w-lg space-y-5 text-center">
                       <div class="mx-auto grid h-24 w-24 place-items-center rounded-full bg-white text-2xl font-black uppercase tracking-[0.24em] text-[#7e0f84]">
                         Aud
@@ -947,7 +964,7 @@ export default component$(() => {
                     </div>
                   </div>
                 ) : previewAssetType === "application/pdf" && previewUrl ? (
-                  <div class="grid min-h-[380px] place-items-center rounded-[24px] border border-white/10 bg-[radial-gradient(circle_at_top,rgba(126,15,132,0.22),transparent_42%),linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0.01))] p-8 text-center">
+                  <div class="grid min-h-[280px] place-items-center rounded-[24px] border border-white/10 bg-[radial-gradient(circle_at_top,rgba(126,15,132,0.22),transparent_42%),linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0.01))] p-8 text-center lg:min-h-[320px] xl:min-h-[380px]">
                     <div class="space-y-4">
                       <div class="mx-auto grid h-24 w-24 place-items-center rounded-full bg-white text-2xl font-black uppercase tracking-[0.24em] text-[#7e0f84]">
                         PDF
@@ -964,26 +981,26 @@ export default component$(() => {
                     </div>
                   </div>
                 ) : (
-                  <div class="grid min-h-[380px] place-items-center rounded-[24px] border border-dashed border-white/15 bg-[radial-gradient(circle_at_top,rgba(126,15,132,0.22),transparent_42%),linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0.01))]">
+                  <div class="grid min-h-[280px] place-items-center rounded-[24px] border border-dashed border-white/15 bg-[radial-gradient(circle_at_top,rgba(126,15,132,0.22),transparent_42%),linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0.01))] lg:min-h-[320px] xl:min-h-[380px]">
                     <div class="text-center">
                       <div class="mx-auto grid h-24 w-24 place-items-center rounded-full bg-white text-2xl font-black uppercase tracking-[0.24em] text-[#7e0f84]">
                         Rec
                       </div>
                       <div class="mt-4 text-xl font-black text-white">Recording stage</div>
                       <p class="mt-3 max-w-md text-sm leading-7 text-white/62">
-                        Grant camera access for live capture or upload a video, audio file or PDF on the left.
+                        Press Start recording to request camera access, or upload a video, audio file or PDF on the left.
                       </p>
                     </div>
                   </div>
                 )}
 
-                <div class="mt-4 grid gap-3 sm:grid-cols-3">
+                <div class="mt-4 flex flex-wrap gap-3">
                   {[
                     ["Clock", displayTimer],
                     ["Asset", previewAssetType || "Pending asset"],
                     ["Source", previewSource],
                   ].map(([label, value]) => (
-                    <div key={label} class="rounded-[20px] border border-white/8 bg-white/[0.04] px-4 py-4">
+                    <div key={label} class="min-w-[112px] flex-1 rounded-[20px] border border-white/8 bg-white/[0.04] px-4 py-4">
                       <div class="text-[10px] uppercase tracking-[0.22em] text-white/36">{label}</div>
                       <div class="mt-2 text-sm font-semibold text-white/80">{value}</div>
                     </div>
@@ -1035,6 +1052,7 @@ export default component$(() => {
                 <div class="mt-4 flex flex-wrap gap-3">
                   <button
                     type="button"
+                    data-no-loader="true"
                     onClick$={async () => {
                       await controls.value?.startCapture();
                     }}
@@ -1045,49 +1063,53 @@ export default component$(() => {
 
                   <button
                     type="button"
+                    data-no-loader="true"
                     onClick$={() => {
                       controls.value?.pauseCapture();
                     }}
                     disabled={recorderState.recorderStatus !== "recording"}
-                    class="rounded-full border border-white/12 bg-white/[0.08] px-4 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
+                    class={stageSecondaryButtonClass}
                   >
                     Pause
                   </button>
 
                   <button
                     type="button"
+                    data-no-loader="true"
                     onClick$={() => {
                       controls.value?.resumeCapture();
                     }}
                     disabled={recorderState.recorderStatus !== "paused"}
-                    class="rounded-full border border-white/12 bg-white/[0.08] px-4 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
+                    class={stageSecondaryButtonClass}
                   >
                     Resume
                   </button>
 
                   <button
                     type="button"
+                    data-no-loader="true"
                     onClick$={() => {
                       controls.value?.stopCapture();
                     }}
                     disabled={!["countdown", "recording", "paused"].includes(recorderState.recorderStatus)}
-                    class="rounded-full border border-white/12 bg-white/[0.08] px-4 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
+                    class={stageSecondaryButtonClass}
                   >
                     Stop
                   </button>
 
                   <button
                     type="button"
+                    data-no-loader="true"
                     onClick$={saveCapturedTake$}
                     disabled={!capturedFile.value || draftAction.isRunning}
-                    class="rounded-full border border-white/12 bg-white/[0.08] px-4 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
+                    class={stageSecondaryButtonClass}
                   >
                     Save captured take
                   </button>
                 </div>
               </div>
 
-              <div class="rounded-[28px] border border-white/10 bg-[#09050e] p-5">
+                <div class="min-w-0 rounded-[28px] border border-white/10 bg-[#09050e] p-4 lg:p-5">
                 <div class="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <div class="text-[10px] uppercase tracking-[0.22em] text-white/42">Teleprompter</div>
@@ -1103,19 +1125,20 @@ export default component$(() => {
                 </p>
                 <div
                   ref={teleprompterViewportRef}
-                  class="mt-5 h-[380px] overflow-hidden rounded-[24px] border border-white/10 bg-black/35 p-5"
+                  class="mt-5 h-[280px] overflow-hidden rounded-[24px] border border-white/10 bg-black/35 p-5 lg:h-[320px] xl:h-[380px]"
                 >
                   <div
                     ref={teleprompterTextRef}
-                    class="whitespace-pre-wrap text-center text-xl font-semibold leading-[1.9] text-white drop-shadow-[0_2px_10px_rgba(0,0,0,0.55)] transition-transform duration-75"
+                    class="whitespace-pre-wrap text-center text-base font-semibold leading-[1.75] text-white drop-shadow-[0_2px_10px_rgba(0,0,0,0.55)] transition-transform duration-75 lg:text-lg xl:text-xl"
                     style={{ transform: `translateY(-${recorderState.teleprompterOffset}px)` }}
                   >
                     {teleprompterText}
                   </div>
                 </div>
               </div>
-            </div>
-          </LegalchainPanel>
+              </div>
+            </LegalchainPanel>
+          </div>
 
           <LegalchainPanel eyebrow="Flow" title="Prompt order">
             <LegalchainChecklist items={flowItems} />

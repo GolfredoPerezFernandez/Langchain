@@ -489,7 +489,7 @@ html.transition {
      GLOBAL BUTTON LOADERS (APP-WIDE)
      ============================================ */
 
-@keyframes acupatas-btn-spin {
+@keyframes legalchain-btn-spin {
   to {
     transform: rotate(360deg);
   }
@@ -517,5 +517,5 @@ button[aria-busy="true"]:not([data-no-loader="true"])::after {
   border: 2px solid currentColor;
   border-right-color: transparent;
   opacity: 0.85;
-  animation: acupatas-btn-spin 0.7s linear infinite;
+  animation: legalchain-btn-spin 0.7s linear infinite;
 }

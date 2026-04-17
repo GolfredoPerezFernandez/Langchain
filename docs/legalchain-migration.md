@@ -56,9 +56,9 @@ Current `legalchain/back` responsibilities:
   - video collection CRUD
   - payment and Stripe helpers
 
-## Migration target inside `langchain-qwik`
+## Migration target inside `legalchain`
 
-Target stack already present in `langchain-qwik`:
+Target stack already present in `legalchain`:
 
 - Qwik City for pages and SSR
 - `routeLoader$` for page data loading
@@ -150,4 +150,4 @@ Phase 4:
 
 ## Practical conclusion
 
-The correct move is a controlled rewrite inside `langchain-qwik`, not a direct JSX conversion.
+The correct move is a controlled rewrite inside `legalchain`, not a direct JSX conversion.

@@ -24,7 +24,7 @@ export const getTursoClient = () => {
   if (typeof window === 'undefined' && !url) {
     const isFly = Boolean(getServerEnv('FLY_APP_NAME'));
     if (isFly) {
-      url = 'file:/data/acupatas.db';
+      url = 'file:/data/legalchain.db';
     } else {
       url = 'file:dev.db';
     }

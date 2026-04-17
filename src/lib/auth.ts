@@ -7,6 +7,8 @@ export interface SessionInfo {
   token: string;
 }
 
+export const SESSION_COOKIE_NAME = 'legalchain_session';
+
 export const ensureAuthSchema = async () => {
   if (isSchemaEnsured('auth')) return;
   const client = getTursoClient();
@@ -74,7 +76,7 @@ export const createSession = async (userId: string, event: RequestEventBase) => 
   const client = getTursoClient();
 
   // Clear any existing session first to prevent stale session data
-  const existingToken = event.cookie.get('acupatas_session')?.value;
+  const existingToken = event.cookie.get(SESSION_COOKIE_NAME)?.value;
   if (existingToken) {
     await client.execute({
       sql: 'delete from sessions where token = ?',
@@ -98,7 +100,7 @@ export const createSession = async (userId: string, event: RequestEventBase) => 
     ],
   });
 
-  event.cookie.set('acupatas_session', token, {
+  event.cookie.set(SESSION_COOKIE_NAME, token, {
     httpOnly: true,
     sameSite: 'lax',
     path: '/',
@@ -110,7 +112,7 @@ export const createSession = async (userId: string, event: RequestEventBase) => 
 };
 
 export const clearSession = async (event: RequestEventBase) => {
-  const token = event.cookie.get('acupatas_session')?.value;
+  const token = event.cookie.get(SESSION_COOKIE_NAME)?.value;
   if (token) {
     const client = getTursoClient();
     await client.execute({
@@ -118,11 +120,11 @@ export const clearSession = async (event: RequestEventBase) => {
       args: [token],
     });
   }
-  event.cookie.delete('acupatas_session', { path: '/' });
+  event.cookie.delete(SESSION_COOKIE_NAME, { path: '/' });
 };
 
 export const getSessionFromEvent = async (event: RequestEventBase) => {
-  const token = event.cookie.get('acupatas_session')?.value;
+  const token = event.cookie.get(SESSION_COOKIE_NAME)?.value;
   return await getSessionByToken(token);
 };
 

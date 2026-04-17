@@ -7,7 +7,7 @@ const privateVapidKey = getServerEnv('PRIVATE_VAPID_KEY') || '';
 
 if (publicVapidKey && privateVapidKey) {
     webpush.setVapidDetails(
-        'mailto:soporte@acupatas.com',
+        'mailto:soporte@legalchain.local',
         publicVapidKey,
         privateVapidKey
     );

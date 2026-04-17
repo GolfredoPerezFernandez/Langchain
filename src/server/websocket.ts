@@ -1,6 +1,6 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import type { IncomingMessage } from 'http';
-import { getSessionByToken } from '../lib/auth';
+import { getSessionByToken, SESSION_COOKIE_NAME } from '../lib/auth';
 
 interface WSClient {
     ws: WebSocket;
@@ -39,7 +39,7 @@ export const initWebSocketServer = (server: any) => {
         try {
             const url = new URL(request.url || '', `http://${request.headers.host}`);
             if (url.pathname === '/ws') {
-                const sessionToken = getCookieValue(request.headers.cookie, 'acupatas_session');
+                const sessionToken = getCookieValue(request.headers.cookie, SESSION_COOKIE_NAME);
                 const session = await getSessionByToken(sessionToken);
                 if (!session?.userId) {
                     socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');

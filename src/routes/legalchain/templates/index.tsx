@@ -9,6 +9,7 @@ import {
 } from "~/components/legalchain/ui";
 import {
   getCurrentLegalchainUser,
+  listLegalchainTemplateCategories,
   listLegalchainTemplates,
   type LegalchainTemplateRecord,
 } from "~/lib/legalchain/store";
@@ -22,11 +23,10 @@ export const useTemplatesLoader = routeLoader$(async (event) => {
   const query = event.url.searchParams.get("q") ?? "";
   const status = event.url.searchParams.get("status") ?? "";
   const category = event.url.searchParams.get("category") ?? "";
-  const templates = await listLegalchainTemplates({ query, status, category });
-  const allTemplates = await listLegalchainTemplates();
-  const categories = Array.from(
-    new Set(allTemplates.map((template: LegalchainTemplateRecord) => template.category)),
-  ).sort();
+  const [templates, categories] = await Promise.all([
+    listLegalchainTemplates({ query, status, category }),
+    listLegalchainTemplateCategories(),
+  ]);
 
   return { user, templates, filters: { query, status, category }, categories };
 });

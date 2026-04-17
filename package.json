@@ -1,7 +1,7 @@
 {
   "type": "module",
-  "name": "acupatas-main",
-  "description": "Demo App with Routing built-in (recommended)",
+  "name": "legalchain",
+  "description": "Legalchain workspace built with Qwik City.",
   "packageManager": "yarn@1.22.22",
   "engines": {
     "node": ">=15.0.0"

@@ -1,12 +1,12 @@
 {
   "$schema": "https://json.schemastore.org/web-manifest-combined.json",
-  "name": "Acupatas",
-  "short_name": "Acupatas",
+  "name": "Legalchain",
+  "short_name": "Legalchain",
   "start_url": ".",
   "display": "standalone",
   "background_color": "#fff",
   "theme_color": "#4a2e85",
-  "description": "Plataforma líder en cuidado y servicios para mascotas en Venezuela",
+  "description": "Legalchain workspace for templates, recording, NFT publishing and payments.",
   "icons": [
     {
       "src": "/favicon.ico",

@@ -106,7 +106,7 @@ export const PWAInstallButton = component$(() => {
                             <div class="w-16 h-16 bg-[#f7f3ff] rounded-2xl mx-auto flex items-center justify-center mb-4">
                                 <LuDownload class="w-8 h-8 text-[#4a2e85]" />
                             </div>
-                            <h3 class="text-xl font-bold text-[#4a2e85] mb-2">Instalar ACUPATAS</h3>
+                            <h3 class="text-xl font-bold text-[#4a2e85] mb-2">Instalar Legalchain</h3>
                             <p class="text-sm text-gray-600">Instala nuestra App en tu iPhone para una experiencia más rápida y pantalla completa.</p>
                         </div>
 
